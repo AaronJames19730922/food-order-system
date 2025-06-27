@@ -327,7 +327,7 @@
     // 修正：補上 changeQty 函式
     function changeQty(idx, delta) {
       const input = document.getElementById('qty-input-' + idx);
-      let val = parseInt(input.value, 10 ) || 0;
+      let val = parseInt(input.value, 10) || 0;
       val += delta;
       // 允許負數
       if (val > 10) val = 10;
