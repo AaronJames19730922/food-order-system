@@ -34,65 +34,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// 初始化資料表
-db.serialize(() => {
-  // 自動檢查並新增 period 欄位
-  db.get("PRAGMA table_info(menu)", (err, row) => {
-    db.all("PRAGMA table_info(menu)", (err, columns) => {
-      if (!columns.some(col => col.name === 'period')) {
-        db.run("ALTER TABLE menu ADD COLUMN period TEXT");
-      }
-    });
-  });
-  // 自動檢查並新增 branch 欄位
-  db.get("PRAGMA table_info(orders)", (err, row) => {
-    db.all("PRAGMA table_info(orders)", (err, columns) => {
-      if (!columns.some(col => col.name === 'branch')) {
-        db.run("ALTER TABLE orders ADD COLUMN branch TEXT");
-      }
-    });
-  });
-  // 自動檢查並新增 image 欄位
-  db.get("PRAGMA table_info(menu)", (err, row) => {
-    db.all("PRAGMA table_info(menu)", (err, columns) => {
-      if (!columns.some(col => col.name === 'image')) {
-        db.run("ALTER TABLE menu ADD COLUMN image TEXT");
-      }
-    });
-  });
-  db.run(`CREATE TABLE IF NOT EXISTS menu (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    period TEXT,
-    category TEXT,
-    name TEXT NOT NULL,
-    price INTEGER NOT NULL
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    order_id TEXT,
-    branch TEXT,
-    table_no TEXT,
-    dine_type TEXT,
-    order_items TEXT,
-    total INTEGER,
-    created_at TEXT
-  )`);
-  // 新增分店 branches 資料表
-  db.run(`CREATE TABLE IF NOT EXISTS branches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    phone TEXT,
-    address TEXT
-  )`);
-});
-
-/*let menu = [
-  { id: 1, name: '大麥克', price: 75 },
-  { id: 2, name: '麥香雞', price: 60 },
-  { id: 3, name: '薯條(大)', price: 50 }
-];*/
-let orders = [];
-
+// 取得菜單
 app.get('/api/menu', (req, res) => {
   pool.query('SELECT * FROM menu', (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -109,6 +51,7 @@ app.get('/api/menu', (req, res) => {
   });
 });
 
+// 新增訂單
 app.post('/api/order', (req, res) => {
   const { order_id, branch, table_no, dine_type, order_items, total } = req.body;
   pool.query(
@@ -121,6 +64,7 @@ app.post('/api/order', (req, res) => {
   );
 });
 
+// 取得所有訂單
 app.get('/api/admin/orders', (req, res) => {
   pool.query('SELECT * FROM orders ORDER BY id DESC', (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -132,87 +76,52 @@ app.get('/api/admin/orders', (req, res) => {
   });
 });
 
-// 支援圖片上傳的菜單新增 API
-app.post('/api/admin/menu', (req, res, next) => {
-  if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
-    const formidable = require('formidable');
-    const form = new formidable.IncomingForm({ multiples: false, uploadDir: path.join(__dirname, 'public', 'images'), keepExtensions: true });
-    form.parse(req, (err, fields, files) => {
-      console.log('新增餐點 fields:', fields);
-      console.log('新增餐點 files keys:', Object.keys(files));
-      // 兼容新版 formidable 單檔案也包陣列
-      const imageFileArr = files.image || Object.values(files)[0];
-      const imageFile = Array.isArray(imageFileArr) ? imageFileArr[0] : imageFileArr;
-      if (err) return res.status(500).json({ error: err.message });
-      // 修正新版 formidable 欄位皆為陣列
-      const period = Array.isArray(fields.period) ? fields.period[0] : fields.period;
-      const category = Array.isArray(fields.category) ? fields.category[0] : fields.category;
-      const name = Array.isArray(fields.name) ? fields.name[0] : fields.name;
-      const price = Number(Array.isArray(fields.price) ? fields.price[0] : fields.price);
-      if (!name || !category || !period || isNaN(price) || price <= 0) {
-        console.log('欄位驗證失敗:', { period, category, name, price });
-        return res.status(400).json({ error: '欄位格式錯誤' });
-      }
-      if (imageFile && imageFile.originalFilename) {
-        const imagesDir = path.join(__dirname, 'public', 'images');
-        const normalizeName = s => path.normalize(s).toLowerCase().normalize('NFC');
-        const originalName = normalizeName(imageFile.originalFilename);
-        const allFiles = fs.readdirSync(imagesDir);
-        const matchFile = allFiles.find(f => normalizeName(f) === originalName);
-        const destPath = path.join(imagesDir, imageFile.originalFilename);
-        if (matchFile) {
-          const image = '/images/' + matchFile;
-          db.run('INSERT INTO menu (period, category, name, price, image) VALUES (?, ?, ?, ?, ?)', [period, category, name, price, image], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            fs.unlinkSync(imageFile.filepath);
-            res.status(201).json({ success: true, id: this.lastID, image });
-          });
-        } else {
-          fs.renameSync(imageFile.filepath, destPath);
-          const image = '/images/' + imageFile.originalFilename;
-          db.run('INSERT INTO menu (period, category, name, price, image) VALUES (?, ?, ?, ?, ?)', [period, category, name, price, image], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ success: true, id: this.lastID, image });
-          });
-        }
-      } else {
-        console.log('imageFile 檢查失敗:', imageFile);
-        return res.status(400).json({ error: '未收到圖片檔案，請重新選擇圖片' });
-      }
-    });
-  } else {
-    // 避免與上方變數衝突，改名為 _period, _category, _name, _price
-    const { period: _period, category: _category, name: _name, price: _price } = req.body;
-    db.run('INSERT INTO menu (period, category, name, price) VALUES (?, ?, ?, ?)', [_period, _category, _name, _price], function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.status(201).json({ success: true, id: this.lastID });
-    });
+// 新增菜單（含圖片）
+app.post('/api/admin/menu', upload.single('image'), (req, res) => {
+  const { period, category, name, price } = req.body;
+  let image = null;
+  if (req.file) {
+    image = '/images/' + req.file.filename;
   }
+  pool.query(
+    'INSERT INTO menu (period, category, name, price, image) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+    [period, category, name, price, image],
+    (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.status(201).json({ success: true, id: result.rows[0].id, image });
+    }
+  );
 });
 
+// 刪除菜單
 app.delete('/api/admin/menu/:id', (req, res) => {
   const id = parseInt(req.params.id);
-  db.run('DELETE FROM menu WHERE id = ?', [id], function(err) {
+  pool.query('DELETE FROM menu WHERE id = $1', [id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ success: true });
   });
 });
 
+// 更新菜單
 app.put('/api/admin/menu/:id', (req, res) => {
   const id = parseInt(req.params.id);
   const { period, category, name, price } = req.body;
-  db.run('UPDATE menu SET period = ?, category = ?, name = ?, price = ? WHERE id = ?', [period, category, name, price, id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true });
-  });
+  pool.query(
+    'UPDATE menu SET period = $1, category = $2, name = $3, price = $4 WHERE id = $5',
+    [period, category, name, price, id],
+    (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true });
+    }
+  );
 });
 
-// 新增：支援圖片單獨上傳 API
+// 單獨上傳圖片
 app.post('/api/admin/menu/:id/image', upload.single('image'), (req, res) => {
   const id = parseInt(req.params.id);
   if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
   const image = '/images/' + req.file.filename;
-  db.run('UPDATE menu SET image = ? WHERE id = ?', [image, id], function(err) {
+  pool.query('UPDATE menu SET image = $1 WHERE id = $2', [image, id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ success: true, image });
   });
@@ -225,6 +134,7 @@ app.get('/api/branches', (req, res) => {
     res.json(result.rows);
   });
 });
+
 // 新增分店
 app.post('/api/branches', (req, res) => {
   const { name, phone, address } = req.body;
@@ -237,6 +147,7 @@ app.post('/api/branches', (req, res) => {
     }
   );
 });
+
 // 更新分店
 app.put('/api/branches/:id', (req, res) => {
   const id = parseInt(req.params.id);
@@ -249,7 +160,8 @@ app.put('/api/branches/:id', (req, res) => {
       res.json({ success: true });
     }
   );
-  });
+});
+
 // 刪除分店
 app.delete('/api/branches/:id', (req, res) => {
   const id = parseInt(req.params.id);
