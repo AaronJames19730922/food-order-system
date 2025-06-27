@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>分店管理</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>分店管理</h1>
+  <button id="add-branch-btn" style="margin:10px 0 16px 0;">新增分店</button>
+  <div id="branch-admin"></div>
+  <script>
+    // 分店管理功能：從資料庫同步
+    let branches = [];
+    async function fetchBranches() {
+      const res = await fetch('/api/branches');
+      branches = await res.json();
+      renderBranchTable();
+    }
+    function renderBranchTable() {
+      let html = `<table style='width:100%;max-width:500px;margin:auto;font-size:12px;'><tr><th>名稱</th><th>電話</th><th>地址</th><th></th></tr>`;
+      branches.forEach((b, i) => {
+        html += `<tr>
+          <td><input value="${b.name}" style="width:90px" onchange="updateBranch(${b.id},'name',this.value)"></td>
+          <td><input value="${b.phone}" style="width:100px" onchange="updateBranch(${b.id},'phone',this.value)"></td>
+          <td><input value="${b.address}" style="width:180px" onchange="updateBranch(${b.id},'address',this.value)"></td>
+          <td><button onclick="deleteBranch(${b.id})">刪除</button></td>
+        </tr>`;
+      });
+      html += `</table>`;
+      document.getElementById('branch-admin').innerHTML = html;
+    }
+    window.updateBranch = async function(id, key, val) {
+      const branch = branches.find(b => b.id === id);
+      if (!branch) return;
+      branch[key] = val;
+      await fetch(`/api/branches/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(branch)
+      });
+      fetchBranches();
+    }
+    window.deleteBranch = async function(id) {
+      if (confirm('確定刪除此分店？')) {
+        await fetch(`/api/branches/${id}`, { method: 'DELETE' });
+        fetchBranches();
+      }
+    }
+    window.addEventListener('DOMContentLoaded', function() {
+      fetchBranches();
+      document.getElementById('add-branch-btn').onclick = async function() {
+        await fetch('/api/branches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: '', phone: '', address: '' })
+        });
+        fetchBranches();
+      };
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>後台管理</title>
+  <link rel="stylesheet" href="back-style.css">
+</head>
+<body>
+  <h1>後台管理</h1>
+  <div class="menu-form">
+    <select id="item-period-select">
+      <option value="早餐">早餐</option>
+      <option value="早午餐">早午餐</option>
+      <option value="午餐">午餐</option>
+      <option value="晚餐">晚餐</option>
+      <option value="宵夜">宵夜</option>
+      <option value="全日">全日</option>
+    </select>
+    <select id="item-category-select">
+      <option value="漢堡">漢堡</option>
+      <option value="飲料">飲料</option>
+      <option value="點心">點心</option>
+      <option value="中餐">中餐</option>
+      <option value="西餐">西餐</option>
+      <option value="麵食">麵食</option>
+      <option value="日式料理">日式料理</option>
+      <option value="義式料理">義式料理</option>
+      <option value="水果">水果</option>
+      <option value="其他">其他</option>
+    </select>
+    <input id="item-name" placeholder="餐點名稱">
+    <input id="item-price" placeholder="價格" type="number">
+    <input id="item-image" type="file" accept="image/*">
+    <img id="item-image-preview" style="display:none;max-width:60px;max-height:60px;margin-left:8px;vertical-align:middle;">
+    <button onclick="addItem()">新增</button>
+  </div>
+  <ul id="menu-list"></ul>
+  
+  <script>
+// 全域宣告圖片 input 與預覽
+const itemImageInput = document.getElementById('item-image');
+const itemImagePreview = document.getElementById('item-image-preview');
+
+function fetchMenu() {
+  fetch('/api/menu').then(res => res.json()).then(data => {
+    const list = document.getElementById('menu-list');
+    list.innerHTML = '';
+    data.forEach(item => {
+      const li = document.createElement('li');
+      // 圖片顯示（如有）
+      if (item.image) {
+        const img = document.createElement('img');
+        img.src = item.image || '/images/default.png';
+        img.style.width = '36px';
+        img.style.height = '36px';
+        img.style.objectFit = 'cover';
+        img.style.marginRight = '8px';
+        img.style.verticalAlign = 'middle';
+        li.appendChild(img);
+      }
+      // 可編輯時段 select
+      const periodSelect = document.createElement('select');
+      ['早餐','早午餐','午餐','晚餐','宵夜','全日'].forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt;
+        o.textContent = opt;
+        if (item.period === opt) o.selected = true;
+        periodSelect.appendChild(o);
+      });
+      periodSelect.style.marginRight = '4px';
+      // 可編輯分類 select
+      const categorySelect = document.createElement('select');
+      ['漢堡','飲料','點心','中餐','西餐','麵食','日式料理','義式料理','水果','其他'].forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt;
+        o.textContent = opt;
+        if (item.category === opt) o.selected = true;
+        categorySelect.appendChild(o);
+      });
+      categorySelect.style.marginRight = '4px';
+      // 可編輯名稱 input
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.value = item.name;
+      nameInput.style.width = '80px';
+      // 可編輯價格 input
+      const priceInput = document.createElement('input');
+      priceInput.type = 'number';
+      priceInput.value = item.price;
+      priceInput.style.width = '60px';
+      // 儲存按鈕
+      const saveBtn = document.createElement('button');
+      saveBtn.textContent = 'SAVE';
+      saveBtn.onclick = () => updateItem(item.id, periodSelect.value, categorySelect.value, nameInput.value, priceInput.value);
+      // 刪除按鈕
+      const delBtn = document.createElement('button');
+      delBtn.textContent = 'DELETE';
+      delBtn.onclick = () => deleteItem(item.id);
+      li.appendChild(periodSelect);
+      li.appendChild(categorySelect);
+      li.appendChild(nameInput);
+      li.appendChild(document.createTextNode(' NT$'));
+      li.appendChild(priceInput);
+      li.appendChild(saveBtn);
+      li.appendChild(delBtn);
+      list.appendChild(li);
+    });
+  });
+}
+
+// 圖片預覽功能
+itemImageInput.onchange = function(e) {
+  if (this.files && this.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      itemImagePreview.src = ev.target.result;
+      itemImagePreview.style.display = '';
+    };
+    reader.readAsDataURL(this.files[0]);
+  } else {
+    itemImagePreview.style.display = 'none';
+  }
+};
+
+function addItem() {
+  const period = document.getElementById('item-period-select').value;
+  const category = document.getElementById('item-category-select').value;
+  const name = document.getElementById('item-name').value;
+  const price = parseInt(document.getElementById('item-price').value);
+  console.log('itemImageInput.files:', itemImageInput.files); // 除錯
+  if (!name.trim()) {
+    alert('餐點名稱不能為空');
+    return;
+  }
+  if (isNaN(price) || price <= 0) {
+    alert('價格必須為正數');
+    return;
+  }
+  if (!itemImageInput.files[0]) {
+    alert('請選擇圖片');
+    return;
+  }
+  const formData = new FormData();
+  formData.append('period', period);
+  formData.append('category', category);
+  formData.append('name', name);
+  formData.append('price', price);
+  formData.append('image', itemImageInput.files[0]);
+  fetch('/api/admin/menu', {
+    method: 'POST',
+    body: formData
+  }).then(() => {
+    fetchMenu();
+    document.getElementById('item-name').value = '';
+    document.getElementById('item-price').value = '';
+    itemImageInput.value = '';
+    itemImagePreview.style.display = 'none';
+  });
+}
+function deleteItem(id) {
+  fetch('/api/admin/menu/' + id, {
+    method: 'DELETE'
+  }).then(() => fetchMenu());
+}
+function updateItem(id, period, category, name, price, image) {
+  if (!name.trim()) {
+    alert('餐點名稱不能為空');
+    return;
+  }
+  if (isNaN(price) || price === '' || Number(price) <= 0) {
+    alert('價格必須為正數');
+    return;
+  }
+  fetch('/api/admin/menu/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ period, category, name, price: Number(price), image})
+  }).then(() => fetchMenu());
+}
+fetchMenu();
+</script>
+</body>
+</html>

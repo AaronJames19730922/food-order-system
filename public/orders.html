@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>訂單列表</title>
+  <link rel="stylesheet" href="back-style.css">
+</head>
+<body>
+  <h1>訂單列表</h1>
+  <ul id="order-list"></ul>
+  <script>
+    function fetchOrders() {
+      fetch('/api/admin/orders').then(res => res.json()).then(data => {
+        const list = document.getElementById('order-list');
+        list.innerHTML = '';
+        data.forEach(order => {
+          const li = document.createElement('li');
+          let itemsText = '';
+          if (Array.isArray(order.order_items)) {
+            itemsText = order.order_items.map(
+              oi => `${oi.item.name} x${oi.qty}`
+            ).join('<br>');
+          }
+          let dateTime = order.created_at
+            ? new Date(order.created_at).toLocaleString('zh-TW', { hour12: false })
+            : '-';
+          li.innerHTML =
+            `<strong>訂單編號:</strong> ${order.order_id || '-'}<br>` +
+            `<strong>分店:</strong> ${order.branch || '-'}<br>` +
+            `<strong>用餐方式:</strong> ${order.dine_type || '-'}<br>` +
+            `<strong>餐點:</strong><br>${itemsText}<br>` +
+            `<strong>總金額:</strong> NT$${order.total || 0}<br>` +
+            `<strong>時間:</strong> ${dateTime}`;
+          // 新增刪除按鈕
+          const delBtn = document.createElement('button');
+          delBtn.textContent = '刪除';
+          delBtn.style.marginLeft = '12px';
+          delBtn.onclick = function() {
+            if (confirm('確定要刪除此訂單？')) {
+              fetch(`/api/admin/orders/${order.id}`, { method: 'DELETE' })
+                .then(() => fetchOrders());
+            }
+          };
+          li.appendChild(delBtn);
+          list.appendChild(li);
+        });
+      });
+    }
+    fetchOrders();
+  </script>
+</body>
+</html>
