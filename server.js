@@ -12,11 +12,12 @@ app.use(express.json());
 app.use(express.static('public'));
 
 const pool = new Pool({
-  user: '你的帳號',
-  host: 'localhost',
-  database: '你的資料庫',
-  password: '你的密碼',
-  port: 5432,
+  user: process.env.PGUSER,
+  host: process.env.PGHOST,
+  database: process.env.PGDATABASE,
+  password: process.env.PGPASSWORD,
+  port: process.env.PGPORT,
+  ssl: { rejectUnauthorized: false }
 });
 
 // 設定圖片上傳儲存位置
